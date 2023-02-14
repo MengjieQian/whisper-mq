@@ -27,6 +27,8 @@ def transcribe(
     no_speech_threshold: Optional[float] = 0.6,
     condition_on_previous_text: bool = True,
     initial_prompt: Optional[str] = None,
+    start_time = -1,
+    duration = -1,
     **decode_options,
 ):
     """
@@ -128,7 +130,7 @@ def transcribe(
 
         return decode_result
 
-    seek = 0
+    seek = 0 if start_time == -1 else int(start_time * 100)     # mq227
     input_stride = exact_div(
         N_FRAMES, model.dims.n_audio_ctx
     )  # mel frames per output token: 2
@@ -170,13 +172,15 @@ def transcribe(
             print(make_safe(f"[{format_timestamp(start)} --> {format_timestamp(end)}] {text}"))
 
     # show the progress bar when verbose is False (otherwise the transcribed text will be printed)
-    num_frames = mel.shape[-1]
+    num_frames = mel.shape[-1] if start_time == -1 else int(duration * 100)
+    end_seek = num_frames + int(start_time * 100)
     previous_seek_value = seek
 
     with tqdm.tqdm(total=num_frames, unit='frames', disable=verbose is not False) as pbar:
-        while seek < num_frames:
+        # while seek < num_frames:
+        while seek < end_seek:    # mq227
             timestamp_offset = float(seek * HOP_LENGTH / SAMPLE_RATE)
-            segment = pad_or_trim(mel[:, seek:], N_FRAMES).to(model.device).to(dtype)
+            segment = pad_or_trim(mel[:, seek:], N_FRAMES).to(model.device).to(dtype) if start_time == -1 else pad_or_trim(mel[:, seek:end_seek], N_FRAMES).to(model.device).to(dtype) # mq227
             segment_duration = segment.shape[-1] * HOP_LENGTH / SAMPLE_RATE
 
             decode_options["prompt"] = all_tokens[prompt_reset_since:]
@@ -310,6 +314,7 @@ def cli():
     model = load_model(model_name, device=device, download_root=model_dir)
 
     writer = get_writer(output_format, output_dir)
+
     for audio_path in args.pop("audio"):
         result = transcribe(model, audio_path, temperature=temperature, **args)
         writer(result, audio_path)
