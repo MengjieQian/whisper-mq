@@ -27,8 +27,8 @@ def transcribe(
     no_speech_threshold: Optional[float] = 0.6,
     condition_on_previous_text: bool = True,
     initial_prompt: Optional[str] = None,
-    start_time = -1,
-    duration = -1,
+    start_time = -1,    # mq227
+    duration = -1,      # mq227
     **decode_options,
 ):
     """
@@ -130,7 +130,7 @@ def transcribe(
 
         return decode_result
 
-    seek = 0 if start_time == -1 else int(start_time * 100)     # mq227
+    seek = 0 if start_time == -1 else int(start_time * 100)       # mq227 
     input_stride = exact_div(
         N_FRAMES, model.dims.n_audio_ctx
     )  # mel frames per output token: 2
@@ -173,7 +173,7 @@ def transcribe(
 
     # show the progress bar when verbose is False (otherwise the transcribed text will be printed)
     num_frames = mel.shape[-1] if start_time == -1 else int(duration * 100)
-    end_seek = num_frames + int(start_time * 100)
+    end_seek = num_frames if start_time == -1 else num_frames + int(start_time * 100) 
     previous_seek_value = seek
 
     with tqdm.tqdm(total=num_frames, unit='frames', disable=verbose is not False) as pbar:
@@ -212,7 +212,7 @@ def transcribe(
                     )
                     add_segment(
                         start=timestamp_offset + start_timestamp_position * time_precision,
-                        end=timestamp_offset + end_timestamp_position * time_precision,
+                        end=timestamp_offset + end_timestamp_position * time_precision if start_time == -1 else min(timestamp_offset + end_timestamp_position * time_precision, end_seek / 100),
                         text_tokens=sliced_tokens[1:-1],
                         result=result,
                     )
@@ -233,7 +233,7 @@ def transcribe(
 
                 add_segment(
                     start=timestamp_offset,
-                    end=timestamp_offset + duration,
+                    end=timestamp_offset + duration if start_time == -1 else min(timestamp_offset + duration, end_seek / 100),
                     text_tokens=tokens,
                     result=result,
                 )
@@ -314,7 +314,6 @@ def cli():
     model = load_model(model_name, device=device, download_root=model_dir)
 
     writer = get_writer(output_format, output_dir)
-
     for audio_path in args.pop("audio"):
         result = transcribe(model, audio_path, temperature=temperature, **args)
         writer(result, audio_path)
